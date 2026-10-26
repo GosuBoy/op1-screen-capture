@@ -79,3 +79,9 @@ after payload-length and CRC validation. It does not communicate with an OP-1.
 See [the synthetic protocol and API contract](docs/SYNTHETIC-PROTOCOL.md) for limits,
 error recovery, session responsibilities and local test commands. This format is
 not a recovered device protocol and may change before any firmware integration.
+
+## Capture safety research
+
+See [capture safety proof status](docs/CAPTURE-SAFETY.md) for the current offline
+findings and remaining ownership, phase-boundary and DMA contracts. These findings
+do not establish working capture firmware or hardware readiness.
