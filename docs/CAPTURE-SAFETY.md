@@ -2,8 +2,9 @@
 
 This is a public-safe summary of ongoing offline analysis, not a device interface
 specification or an implementation guide. **There is no working capture firmware
-and no hardware proof of safe capture.** The Rust prototype exercises synthetic
-host-side reassembly only.
+and no hardware proof of safe capture.** The Rust prototypes exercise synthetic
+host-side reassembly and an [offline capture-state model](CAPTURE-MODEL.md). Neither
+implements device access or establishes hardware safety.
 
 ## Findings so far
 
@@ -45,3 +46,4 @@ DMA resource or safe snapshot lifetime exists.
 No flashing, device traffic or bootloader modification is authorized by this
 document. Private source exports, firmware bytes, addresses and research artifacts
 are intentionally excluded from this public summary.
+

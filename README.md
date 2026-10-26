@@ -85,3 +85,9 @@ not a recovered device protocol and may change before any firmware integration.
 See [capture safety proof status](docs/CAPTURE-SAFETY.md) for the current offline
 findings and remaining ownership, phase-boundary and DMA contracts. These findings
 do not establish working capture firmware or hardware readiness.
+
+## Offline capture-state model
+
+The serialized Rust model tests fail-closed capture admission, sticky invalidation
+and staging-slot ownership using synthetic events. It does not copy pixels or
+implement hardware synchronization. See [the model contract and limitations](docs/CAPTURE-MODEL.md).

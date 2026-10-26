@@ -2,6 +2,8 @@
 //! No USB, device access, firmware patching, or arbitrary memory commands.
 #![forbid(unsafe_code)]
 
+pub mod capture_model;
+
 pub const HEADER_LEN: usize = 36;
 pub const CHUNK_HEADER_LEN: usize = 24;
 pub const MAX_DIMENSION: u16 = 512;
