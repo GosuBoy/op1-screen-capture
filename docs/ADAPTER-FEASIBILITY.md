@@ -57,6 +57,51 @@ evidence that such hooks already exist. Merely observing events after writes wou
 be insufficient. Rejecting a torn frame after copying also does not make an unsafe
 concurrent memory read legal.
 
+## Narrower setup candidate
+
+The ordinary main-thread binding can be traced through its configured creator,
+runtime entry and virtual Run dispatch. Its entry prefix precedes the recurring
+application lifecycle loop. This nominates a place for one reservation per Run
+invocation, rather than allocation in a display callback or every lifecycle pass.
+
+This is not a once-per-machine guarantee. Thread recreation, destruction, call
+ABI, stack headroom and ownership of added code/state still need explicit handling.
+A bounded exact-address reference census found allocator lookup/registration
+operations, not an ordinary heap-head/count reset. Computed aliases, bulk writes
+and other arena metadata remain outside that census; it is not a lifetime proof.
+
+## First-frame direction: CPU copy, reject rather than repair
+
+Prefer a CPU-copy design that never starts, resets, reprograms or cancels shared
+DMA for capture. If source readiness cannot be established, drop the capture
+request rather than force the engine into a desired state. This removes the
+capture transfer's own DMA programming and recovery obligations, not the need to
+exclude stock DMA writes to the source.
+
+A finite proposed owner-hook set covers these known categories:
+
+- Ordinary render entry and source-context rebinding.
+- Display service, including inline/special writes and direct text rendering.
+- Existing DMA writer entries before their first register mutation.
+- Diagnostic rendering outside the ordinary graphics path.
+- Lifecycle, callback and source-selection changes.
+
+The categories are a partial coverage certificate, not proof that every incoming
+edge, computed target, interior entry or aliased write is intercepted. A stock
+DMA helper returning is also not automatically an owner-release event: completion
+freshness and actual draining must be justified independently.
+
+A possible way to make source reads safe is a sequence of small protected copy
+chunks: validate ownership and pinned geometry inside each protected read window,
+then restore normal scheduling between chunks. No source borrow/reference may
+escape its protected interval or persist across a yield. Any writer between chunks
+invalidates the entire attempt. Final publication must atomically recheck validity.
+This is a proposal, not an implemented synchronization primitive. It requires
+complete writer/launch coverage, precise ordering, exclusion of autonomous DMA,
+known exception/interrupt behavior and a justified worst-case chunk time. A full
+frame copied with interrupts disabled is not the proposed solution. Volatile reads
+or a later checksum do not substitute for those requirements.
+
 ## Decision
 
 - Continue with an explicit reservation-and-ownership design rather than a fixed
