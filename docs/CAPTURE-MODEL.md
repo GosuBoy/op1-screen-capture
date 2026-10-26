@@ -57,6 +57,9 @@ All handle IDs share a checked, nonwrapping counter and belong to one model
 instance's event stream. They are not security capabilities and must not be
 replayed into another instance. A new model has a new logical namespace, not a
 mechanism for safely resetting real hardware or recycling outstanding leases.
+The lifecycle event models changes within a live run; it does not preserve heap
+allocations through an actual reboot, power loss or firmware replacement. A new
+run needs fresh initialization and transport-session handling.
 
 ## Test scope
 

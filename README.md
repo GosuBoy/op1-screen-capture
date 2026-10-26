@@ -91,3 +91,6 @@ do not establish working capture firmware or hardware readiness.
 The serialized Rust model tests fail-closed capture admission, sticky invalidation
 and staging-slot ownership using synthetic events. It does not copy pixels or
 implement hardware synchronization. See [the model contract and limitations](docs/CAPTURE-MODEL.md).
+
+See [firmware adapter feasibility](docs/ADAPTER-FEASIBILITY.md) for the conditional
+stock-allocator reservation route and why queue bookkeeping is not a render lock.

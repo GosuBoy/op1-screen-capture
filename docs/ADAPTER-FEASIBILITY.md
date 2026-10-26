@@ -1,0 +1,72 @@
+# Firmware adapter feasibility: reservation and exclusion
+
+This is an offline feasibility checkpoint for original OP-1 stock firmware, not a
+patch, callable ABI specification, or permission to test hardware. The public
+repository deliberately excludes proprietary bytes and private source exports.
+
+## Staging: a concrete allocation route, with unresolved prerequisites
+
+Static analysis identifies a stock general-heap allocation wrapper and matching
+exact-pointer release path. This provides a candidate for reserving an owned
+staging allocation instead of guessing unused framebuffer, stack or USB memory.
+
+The proposed policy is:
+
+1. In a separately established ordinary-thread initialization context, validate
+   the required packed-frame size using checked arithmetic and a bounded geometry
+   contract. Account for any justified alignment padding before allocation.
+2. Attempt one reservation. Allocation failure leaves capture disabled. Nominal
+   arena size does not establish current free space or a safe memory budget.
+3. Retain the original allocation pointer for release, even if a usable interior
+   pointer is aligned separately. Never pass an interior pointer to the stock
+   deallocator.
+4. Do not allocate or free in a render hook or interrupt handler: the inspected
+   allocator contains free-list scans and runtime lock hooks. Neither bounded
+   latency nor ISR suitability follows from the wrapper being callable.
+5. Within a live firmware run, and only while the allocator arena remains valid,
+   retain the reservation through display lifecycle
+   changes until copying and any snapshot consumer have actually finished.
+   Changing modes or observing a reset flag is not consumer completion.
+
+The inspected allocator supports eight-byte block alignment under valid heap
+state. That is not proof of a larger cache-line or DMA alignment requirement.
+Lazy-initialization guards suggest an ordinary reuse path, but do not prove that
+the heap can never be reset or corrupted by other paths. ABI, lock-hook binding,
+execution context, memory budget and lifetime across all relevant transitions
+remain implementation gates.
+
+An actual reboot, power loss or firmware/address-space replacement is different
+from an in-process display lifecycle change. Old heap pointers cannot be retained
+across it. A new run starts untrusted and needs fresh initialization and transport
+session handling. The offline model does not provide persistent memory or reboot
+recovery.
+
+## Source exclusion: queue bookkeeping is not a render lock
+
+An apparent pair of operations around graphics dispatch resolves to queue-record
+consumption and a small bookkeeping clear, not a mutex held across rendering.
+Consequently, using that pair as the snapshot's exclusion mechanism is rejected.
+
+Likewise, a display busy flag, a callback notification, a phase landmark or a
+semaphore wake cannot by itself exclude every framebuffer writer or prove DMA
+completion. A new adapter still needs an actual enforcement mechanism covering
+ordinary rendering, alternate paths, asynchronous writers and lifecycle changes.
+
+The model's owner and normalization events are obligations for that adapter, not
+evidence that such hooks already exist. Merely observing events after writes would
+be insufficient. Rejecting a torn frame after copying also does not make an unsafe
+concurrent memory read legal.
+
+## Decision
+
+- Continue with an explicit reservation-and-ownership design rather than a fixed
+  spare-memory address or implicit queue lock.
+- Do not emit target code that calls the allocator or copies pixels until its
+  context, lifetime, geometry and exclusion prerequisites have been established.
+- Keep the existing DMA handoff and cache-coherence gates open. Choosing a CPU
+  copy does not eliminate source writes performed by an existing DMA owner.
+- No capture hook, memory reservation, hardware throughput or audio impact has
+  been validated on a device.
+
+See [the capture-state model](CAPTURE-MODEL.md) and
+[the remaining safety contracts](CAPTURE-SAFETY.md).

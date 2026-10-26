@@ -47,3 +47,5 @@ No flashing, device traffic or bootloader modification is authorized by this
 document. Private source exports, firmware bytes, addresses and research artifacts
 are intentionally excluded from this public summary.
 
+The [adapter feasibility checkpoint](ADAPTER-FEASIBILITY.md) narrows staging and
+exclusion candidates without closing these contracts.
