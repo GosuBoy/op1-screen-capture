@@ -67,5 +67,15 @@ firmware images, device secrets, private research exports or unrelated personal 
 Any future binary patcher should use owner-supplied inputs and verify the exact
 supported baseline before modifying anything.
 
-Future implementation work should use focused branches and reviewed changes. There
-are no build or test results to claim for this documentation-only starting point.
+Future implementation work should use focused branches and reviewed changes. The
+host-only prototype does not establish a hardware-ready firmware implementation.
+
+## Host-only Rust prototype
+
+The dependency-free library in `src/lib.rs` parses an experimental synthetic header
+and reassembles bounded, ordered RGB565 frames. It exposes complete frames only
+after payload-length and CRC validation. It does not communicate with an OP-1.
+
+See [the synthetic protocol and API contract](docs/SYNTHETIC-PROTOCOL.md) for limits,
+error recovery, session responsibilities and local test commands. This format is
+not a recovered device protocol and may change before any firmware integration.
