@@ -121,7 +121,7 @@ by treating this partial certificate as complete writer coverage.
 
 - Continue with an explicit reservation-and-ownership design rather than a fixed
   spare-memory address or implicit queue lock.
-- Do not emit target code that calls the allocator or copies pixels until its
+- Do not integrate target code that calls the stock allocator or copies pixels until its
   context, lifetime, geometry and exclusion prerequisites have been established.
 - Keep the existing DMA handoff and cache-coherence gates open. Choosing a CPU
   copy does not eliminate source writes performed by an existing DMA owner.
@@ -130,3 +130,7 @@ by treating this partial certificate as complete writer coverage.
 
 See [the capture-state model](CAPTURE-MODEL.md) and
 [the remaining safety contracts](CAPTURE-SAFETY.md).
+
+The [disabled adapter scaffold](DISABLED-ADAPTER.md) is an unbound, relocatable
+prototype for testing reservation/lease bookkeeping. It does not close these
+integration gates or perform source reads.

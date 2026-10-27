@@ -88,7 +88,7 @@ bounded event contract, not flash readiness or successful screen capture.
 
 ## Verification scope
 
-At this milestone all 69 crate tests pass locally in debug and release, with
+At the protected-copy milestone all 69 crate tests passed locally in debug and release, with
 formatting and strict all-target Clippy checks passing. There are 19 new checks
 beyond the original 50-test suite: 12 focused/domain tests, one window-identifier
 exhaustion unit test, and six independently authored adversarial tests preserved

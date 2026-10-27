@@ -98,3 +98,9 @@ stock-allocator reservation route and why queue bookkeeping is not a render lock
 The [protected-copy extension](docs/PROTECTED-COPY-MODEL.md) adds checked row/chunk
 progress and explicit read-window lifetime to the offline model. It still performs
 no device memory reads or hardware synchronization.
+
+## Disabled adapter scaffold
+
+A freestanding C scaffold now exercises allocator/lease bookkeeping and compiles
+as a BF524 relocatable object. It has no capture-enable, pixel-copy or USB path,
+no stock bindings and no fixed placement. See [scope and offline Rust build checks](docs/DISABLED-ADAPTER.md).
