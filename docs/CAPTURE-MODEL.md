@@ -78,9 +78,9 @@ Six independently authored adversarial tests are preserved in
 1,000 stale-ticket lifecycle replacements, both forward and reverse release of
 sixteen mixed owner leases, and slot retention across faults and invalidation.
 
-For this milestone, all 50 tests pass in both debug and release builds: 23 model
+For the original capture-state milestone, all 50 tests passed in both debug and release builds: 23 model
 checks (including the bounded exploration) and 27 unchanged parser tests.
-Formatting and strict all-target Clippy checks also pass. These are local offline
+Formatting and strict all-target Clippy checks also passed. These are local offline
 results, not a claim of remote CI or device validation.
 
 ## Prerequisites outside this model
@@ -105,6 +105,13 @@ Passing model tests establishes properties only under the modeled event contract
 It does not establish writer coverage, hardware timing, display scanout completion,
 an available staging address, or any frame rate. Tests must report their bounded
 domain rather than claim all possible firmware interleavings were proved.
+
+## Protected-copy extension
+
+The [bounded read-window extension](PROTECTED-COPY-MODEL.md) adds explicit per-row
+progress and window lifetime. Its bounded mode cannot bypass progress by using the
+coarse mode's copy-completed assertion. Both modes remain symbolic event models,
+not firmware synchronization implementations.
 
 ## Running checks
 

@@ -102,6 +102,21 @@ known exception/interrupt behavior and a justified worst-case chunk time. A full
 frame copied with interrupts disabled is not the proposed solution. Volatile reads
 or a later checksum do not substitute for those requirements.
 
+## Incoming-edge audit: stronger witnesses, still partial coverage
+
+A bounded canonical-byte audit distinguishes branch candidates aligned with a
+linear record decode from matching halfwords embedded in other instructions. It also resolves a
+limited set of adjacent immediate pointer loads followed by indirect calls, and
+known callback registrations. These checks confirm why a direct-call-only search
+would miss relevant service and diagnostic paths.
+
+The audit supports keeping the direct diagnostic writer in the proposed hook set,
+not merely its more common diagnostic wrapper. Removing operand/continuation
+false positives makes the candidate ledger more accurate, but does not establish
+whole-program reachability, complete indirect dispatch, absence of arbitrary
+interior entry, or absence of aliased memory writes. Capture must not be enabled
+by treating this partial certificate as complete writer coverage.
+
 ## Decision
 
 - Continue with an explicit reservation-and-ownership design rather than a fixed

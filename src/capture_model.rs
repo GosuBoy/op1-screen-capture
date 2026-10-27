@@ -72,6 +72,99 @@ pub enum ModelError {
     Invalidated,
     NotPublished,
     IdExhausted,
+    Layout,
+    WindowSize,
+    NotBounded,
+    ReadWindowOpen,
+    WrongWindow,
+    CopyComplete,
+    WindowViolation,
+}
+
+/// Checked model geometry for packed RGB565 output from a potentially padded source.
+/// `source_extent` is an asserted accessible extent, not a checked real allocation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CopyLayout {
+    row_bytes: usize,
+    stride: usize,
+    source_span: usize,
+    packed_bytes: usize,
+}
+
+impl CopyLayout {
+    pub fn new(
+        width: u16,
+        height: u16,
+        row_stride: usize,
+        source_extent: usize,
+    ) -> Result<Self, ModelError> {
+        if width == 0
+            || height == 0
+            || width > crate::MAX_DIMENSION
+            || height > crate::MAX_DIMENSION
+        {
+            return Err(ModelError::Layout);
+        }
+        let row_bytes = usize::from(width) * 2;
+        let rows = usize::from(height);
+        if row_stride < row_bytes || !row_stride.is_multiple_of(2) {
+            return Err(ModelError::Layout);
+        }
+        let source_span = row_stride
+            .checked_mul(rows - 1)
+            .and_then(|n| n.checked_add(row_bytes))
+            .ok_or(ModelError::Layout)?;
+        let packed_bytes = row_bytes.checked_mul(rows).ok_or(ModelError::Layout)?;
+        if source_span > source_extent || packed_bytes > crate::MAX_FRAME_BYTES {
+            return Err(ModelError::Layout);
+        }
+        Ok(Self {
+            row_bytes,
+            stride: row_stride,
+            source_span,
+            packed_bytes,
+        })
+    }
+
+    pub fn source_span(self) -> usize {
+        self.source_span
+    }
+    pub fn packed_bytes(self) -> usize {
+        self.packed_bytes
+    }
+}
+
+/// A model-local protected read interval. No source pointer or borrow is retained.
+/// Its ranges describe hypothetical reads, not permission to access target memory.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ReadWindow {
+    id: u64,
+    capture: CaptureId,
+    source_offset: usize,
+    staging_offset: usize,
+    len: usize,
+}
+
+impl ReadWindow {
+    pub fn source_offset(self) -> usize {
+        self.source_offset
+    }
+    pub fn staging_offset(self) -> usize {
+        self.staging_offset
+    }
+    pub fn len(self) -> usize {
+        self.len
+    }
+    pub fn is_empty(self) -> bool {
+        self.len == 0
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct CopyProgress {
+    layout: CopyLayout,
+    window_limit: usize,
+    completed: usize,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -79,6 +172,7 @@ struct Candidate {
     id: CaptureId,
     valid: bool,
     copied: bool,
+    progress: Option<CopyProgress>,
 }
 
 /// One serialized event history. Not Clone: a snapshot is not a new ID namespace.
@@ -90,6 +184,7 @@ pub struct CaptureModel {
     candidate: Option<Candidate>,
     published: Option<CaptureId>,
     last_id: u64,
+    read_window: Option<ReadWindow>,
 }
 
 impl Default for CaptureModel {
@@ -101,6 +196,7 @@ impl Default for CaptureModel {
             candidate: None,
             published: None,
             last_id: 0,
+            read_window: None,
         }
     }
 }
@@ -163,7 +259,15 @@ impl CaptureModel {
 
     /// Record entry before the owner's first write. A suspended owner retains its
     /// lease until it has actually exited. Nested entries each need their own lease.
+    /// Entry during a protected read window permanently poisons this history and
+    /// returns no lease: that event violates the asserted exclusion contract.
     pub fn begin_owner(&mut self, owner: Owner) -> Result<OwnerLease, ModelError> {
+        if self.read_window.is_some() {
+            // This event contradicts the asserted exclusion interval. Do not
+            // pretend that dropping a frame repairs an unsafe concurrent read.
+            self.poison();
+            return Err(ModelError::WindowViolation);
+        }
         self.invalidate_candidate();
         if self.trust == Trust::Normalizing {
             self.lose_trust();
@@ -280,22 +384,144 @@ impl CaptureModel {
             id,
             valid: true,
             copied: false,
+            progress: None,
         });
         Ok(id)
     }
 
-    /// Record a full modeled copy into independently owned staging. Partial copies
-    /// must be cancelled instead. No real byte count or memory access is checked.
+    /// Begin a bounded event-only copy. No allocation or real pixel reads occur.
+    /// The software window limit is not a proven interrupt-latency budget.
+    pub fn begin_bounded_capture(
+        &mut self,
+        layout: CopyLayout,
+        max_window_bytes: usize,
+    ) -> Result<CaptureId, ModelError> {
+        if max_window_bytes == 0
+            || max_window_bytes > crate::MAX_CHUNK_BYTES
+            || !max_window_bytes.is_multiple_of(2)
+        {
+            return Err(ModelError::WindowSize);
+        }
+        let id = self.begin_capture()?;
+        self.candidate
+            .as_mut()
+            .expect("capture just admitted")
+            .progress = Some(CopyProgress {
+            layout,
+            window_limit: max_window_bytes,
+            completed: 0,
+        });
+        Ok(id)
+    }
+
+    pub fn active_read_window(&self) -> Option<ReadWindow> {
+        self.read_window
+    }
+
+    pub fn copied_bytes(&self, id: CaptureId) -> Result<usize, ModelError> {
+        let c = self
+            .candidate
+            .filter(|c| c.id == id)
+            .ok_or(ModelError::WrongCapture)?;
+        c.progress
+            .map(|p| p.completed)
+            .ok_or(ModelError::NotBounded)
+    }
+
+    /// Assert that the adapter has established exclusion for this entire read
+    /// interval, including autonomous writers, and pinned source geometry/lifetime.
+    /// Every actual read must stay within the interval. Do not carry source
+    /// references across `end_read_window` or a yield. This method takes no lock.
+    pub fn begin_read_window(&mut self, id: CaptureId) -> Result<ReadWindow, ModelError> {
+        let c = self
+            .candidate
+            .filter(|c| c.id == id)
+            .ok_or(ModelError::WrongCapture)?;
+        if self.read_window.is_some() {
+            return Err(ModelError::ReadWindowOpen);
+        }
+        if !c.valid || self.trust != Trust::Ready {
+            return Err(ModelError::Invalidated);
+        }
+        if self.owner_count() != 0 {
+            return Err(ModelError::Busy);
+        }
+        let p = c.progress.ok_or(ModelError::NotBounded)?;
+        if p.completed == p.layout.packed_bytes {
+            return Err(ModelError::CopyComplete);
+        }
+        let row = p.completed / p.layout.row_bytes;
+        let column = p.completed % p.layout.row_bytes;
+        let len = p.window_limit.min(p.layout.row_bytes - column);
+        // Layout construction and bounded progress prove these operations fit.
+        let source_offset = row * p.layout.stride + column;
+        let window = ReadWindow {
+            id: self.next_id()?,
+            capture: id,
+            source_offset,
+            staging_offset: p.completed,
+            len,
+        };
+        self.read_window = Some(window);
+        Ok(window)
+    }
+
+    /// Confirm the declared reads have finished and all source borrows ended.
+    /// Progress is recorded only if the asserted interval remained valid. Even
+    /// on invalidation the slot remains reserved until explicit finish/cancel.
+    pub fn end_read_window(&mut self, window: ReadWindow) -> Result<(), ModelError> {
+        if self.read_window != Some(window) {
+            return Err(ModelError::WrongWindow);
+        }
+        self.read_window = None;
+        let c = self
+            .candidate
+            .as_mut()
+            .expect("open window retains candidate");
+        if !c.valid || self.trust != Trust::Ready {
+            return Err(ModelError::Invalidated);
+        }
+        let p = c
+            .progress
+            .as_mut()
+            .expect("window only exists for bounded capture");
+        p.completed += window.len;
+        Ok(())
+    }
+
+    /// Confirm a partial/aborted interval has stopped accessing source and staging.
+    /// No progress is credited; this permanently invalidates the candidate.
+    pub fn abort_read_window(&mut self, window: ReadWindow) -> Result<(), ModelError> {
+        if self.read_window != Some(window) {
+            return Err(ModelError::WrongWindow);
+        }
+        self.read_window = None;
+        self.invalidate_candidate();
+        Ok(())
+    }
+
+    /// Record modeled copy completion after all read activity has stopped. Legacy
+    /// captures assert completion without a byte count; bounded captures require
+    /// every declared byte to have progressed through closed read windows. Neither
+    /// path verifies real memory accesses or pixel contents.
     pub fn finish_copy(&mut self, id: CaptureId) -> Result<(), ModelError> {
         let Some(c) = self.candidate.as_mut().filter(|c| c.id == id) else {
             return Err(ModelError::WrongCapture);
         };
+        if self.read_window.is_some() {
+            return Err(ModelError::ReadWindowOpen);
+        }
         if !c.valid {
             self.candidate = None;
             return Err(ModelError::Invalidated);
         }
         if c.copied {
             return Err(ModelError::AlreadyCopied);
+        }
+        if c.progress
+            .is_some_and(|p| p.completed != p.layout.packed_bytes)
+        {
+            return Err(ModelError::CopyIncomplete);
         }
         c.copied = true;
         Ok(())
@@ -323,6 +549,9 @@ impl CaptureModel {
     /// activity can access staging. This is not an asynchronous cancellation request.
     pub fn cancel_capture(&mut self, id: CaptureId) -> Result<(), ModelError> {
         if self.candidate.is_some_and(|c| c.id == id) {
+            if self.read_window.is_some() {
+                return Err(ModelError::ReadWindowOpen);
+            }
             self.candidate = None;
             Ok(())
         } else {
@@ -358,5 +587,28 @@ mod tests {
         assert_eq!(m.trust(), Trust::Poisoned);
         m.invalidate_lifecycle();
         assert_eq!(m.begin_capture(), Err(ModelError::Poisoned));
+    }
+    #[test]
+    fn window_id_exhaustion_retains_candidate_and_never_reuses_id() {
+        let mut m = CaptureModel {
+            trust: Trust::Ready,
+            last_id: u64::MAX - 2,
+            ..CaptureModel::default()
+        };
+        let c = m
+            .begin_bounded_capture(CopyLayout::new(2, 1, 4, 4).unwrap(), 2)
+            .unwrap();
+        let w = m.begin_read_window(c).unwrap();
+        assert_eq!(w.id, u64::MAX);
+        m.end_read_window(w).unwrap();
+        assert_eq!(m.begin_read_window(c), Err(ModelError::IdExhausted));
+        assert_eq!(m.trust(), Trust::Poisoned);
+        assert_eq!(m.slot(), Slot::Copying);
+        assert_eq!(m.active_read_window(), None);
+        assert_eq!(m.end_read_window(w), Err(ModelError::WrongWindow));
+        assert_eq!(m.copied_bytes(c), Ok(2));
+        m.cancel_capture(c).unwrap();
+        m.invalidate_lifecycle();
+        assert_eq!(m.begin_normalization(), Err(ModelError::Poisoned));
     }
 }

@@ -94,3 +94,7 @@ implement hardware synchronization. See [the model contract and limitations](doc
 
 See [firmware adapter feasibility](docs/ADAPTER-FEASIBILITY.md) for the conditional
 stock-allocator reservation route and why queue bookkeeping is not a render lock.
+
+The [protected-copy extension](docs/PROTECTED-COPY-MODEL.md) adds checked row/chunk
+progress and explicit read-window lifetime to the offline model. It still performs
+no device memory reads or hardware synchronization.
