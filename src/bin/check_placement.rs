@@ -1,5 +1,5 @@
 //! Offline lint only. Never writes firmware or enables capture.
-use op1_screen_capture::{placement, placement_elf};
+use op1_screen_capture::{placement, placement_elf, relocation};
 use std::{
     env, fs,
     io::Write,
@@ -52,6 +52,8 @@ fn run() -> Result<(), String> {
         m.code.start + m.final_image_bytes,
         m.entry,
     )?;
+    let semantic = relocation::verify_relocations(&module, &bytes)?;
+    println!("Bounded semantic check: {} relocation results and {} linked text bytes verified against the supplied object.", semantic.checked_relocations, semantic.text_bytes);
     println!(
         "STRUCTURAL CHECKS PASS: manifest geometry, input identities and linked ELF envelope."
     );
@@ -66,7 +68,7 @@ fn run() -> Result<(), String> {
         ));
     }
     println!("All review reference fields supplied; references are NOT verified evidence.");
-    println!("NOT DEVICE READY: relocation semantics/link provenance, boot ownership, cache execution, capacity and runtime contracts require independent physical integration review. Capture remains disabled.");
+    println!("NOT DEVICE READY: authenticated link provenance, boot ownership, cache execution, capacity and runtime contracts require independent physical integration review. Capture remains disabled.");
     Ok(())
 }
 fn main() -> ExitCode {

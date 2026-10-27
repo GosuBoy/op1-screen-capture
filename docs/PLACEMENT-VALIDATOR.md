@@ -17,8 +17,8 @@ cargo run --offline --bin check_placement -- \
 
 The command hashes the exact input bytes read into memory, compares all three
 SHA-256 identities to the manifest, validates the proposed geometry, and checks
-the actual linked ELF envelope. The canonical and relocatable bytes are hashed,
-not parsed by this command. A matching hash binds inputs to a manifest; it does
+the actual linked ELF envelope. The canonical bytes are hashed, not parsed. The relocatable object and
+linked ELF are additionally compared by the [bounded relocation-result checker](RELOCATION-CHECKS.md). A matching hash binds inputs to a manifest; it does
 not authenticate that manifest or prove that its heap descriptor, ABI, hook
 inventory or evidence statements were derived correctly. Use independently
 reviewed, trusted input identities. Empty/placeholder or unrelated input files
@@ -81,8 +81,10 @@ The following `evidence.NAME` fields identify reports for independent review:
 
 Link envelope inspection rejects unsupported or malformed ELF and residual
 relocation/undefined-symbol cases within its documented narrow format. An ELF
-with no relocation records is **not proof that a linker applied every original
-relocation correctly**. Matching hashes plus a structurally valid artifact still
+with no relocation records alone is **not proof that a linker applied every original
+relocation correctly**. The added bounded checker reconstructs the current five
+relocation results and verifies all final text bytes against the supplied source
+object; it is not a general linker or authentication of that source. Matching hashes plus a structurally valid artifact still
 require semantic link provenance; neither arbitrary metadata counts nor clearing
 relocation sections can satisfy that independent gate. Hardware writer coverage,
 read exclusion, timing and safe capture remain separate unresolved requirements.
@@ -105,7 +107,9 @@ layout/symbols even for legitimate code; rejection is not a diagnosis that the
 compiler or linker is defective. Use an independently reviewed explicit script.
 
 These intentionally narrow constraints fit the disabled freestanding bundle.
-They do not implement architecture relocation semantics or a general ELF loader.
+The ELF envelope itself does not implement relocation semantics or a general
+loader. The separate bounded checker described above verifies only the current
+five relocation results against the supplied object.
 
 ## Reproducible real-toolchain smoke test
 

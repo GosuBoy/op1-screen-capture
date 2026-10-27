@@ -246,3 +246,5 @@ pub fn crc32(bytes: &[u8]) -> u32 {
 
 pub mod placement;
 pub mod placement_elf;
+
+pub mod relocation;

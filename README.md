@@ -117,3 +117,8 @@ explicit cold-reservation geometry, runtime budgets, input hashes and a narrow
 linked-ELF envelope. It rejects incomplete plans and never enables capture or
 selects a device address. Structural success is not physical ownership, semantic
 relocation proof, or device readiness. The supplied manifest is synthetic only.
+
+The [bounded relocation-result checker](docs/RELOCATION-CHECKS.md) reconstructs
+the current five Blackfin relocation results from the supplied REL object and
+checks every linked text byte. Synthetic links and corruption tests remain
+offline; input authentication and physical placement are separate gates.
