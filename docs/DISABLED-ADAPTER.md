@@ -49,7 +49,8 @@ home area; a fourth argument is placed at stack offset 12. The inspected stock
 allocation/release wrappers take their sole payload argument in R0. This
 prototype's callback signatures instead take context in R0 and payload in R1.
 **Casting a stock allocator address to the callback type is invalid.** A separate
-verified bridge is required; this repository does not install one.
+verified bridge is required. The [typed bridge](ALLOCATOR-BRIDGE.md) now supplies
+the signature adaptation, but still installs no stock addresses or live hook.
 
 The nominated main-thread entry has a stack-frame setup before the recurring
 lifecycle call. Hooking before or after that setup has different preservation
@@ -93,9 +94,10 @@ Outputs stay under `target/adapter-check/`. The Rust checker verifies a narrow
 ELF envelope: little-endian ELF32, Blackfin, relocatable, no entry/program headers,
 bounded section/symbol-table storage and no named undefined symbols. This is not
 a general ELF parser, instruction validator, relocation resolver or ABI proof.
-An object can still contain relocations and need a future linker/integration step.
+The current adapter-plus-bridge bundle retains relocations and needs a future
+final placement/linking step; the checker counts but does not resolve them.
 
-## Reviewed snapshot results
+## Original adapter-only snapshot results
 
 - All 72 Rust tests pass in debug and release, including three checker-envelope
   tests; formatting and strict all-target Clippy pass.

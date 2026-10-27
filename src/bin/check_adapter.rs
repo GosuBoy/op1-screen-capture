@@ -15,7 +15,13 @@ fn u32_at(bytes: &[u8], at: usize) -> Result<u32, String> {
 
 /// A deliberately narrow compiler-output envelope check, not a general ELF loader,
 /// instruction validator, linker, relocation resolver or target ABI proof.
-fn inspect_object(bytes: &[u8]) -> Result<usize, String> {
+#[derive(Debug, PartialEq, Eq)]
+struct ObjectSummary {
+    sections: usize,
+    relocations: usize,
+}
+
+fn inspect_object(bytes: &[u8]) -> Result<ObjectSummary, String> {
     if bytes.len() < 52 || bytes.get(..7) != Some(b"\x7fELF\x01\x01\x01") {
         return Err("expected little-endian ELF32 version 1".into());
     }
@@ -37,6 +43,7 @@ fn inspect_object(bytes: &[u8]) -> Result<usize, String> {
         return Err("section table outside object".into());
     }
     let mut symbol_tables = 0;
+    let mut relocations: usize = 0;
     for index in 0..count {
         let header = table + index * 40;
         let kind = u32_at(bytes, header + 4)?;
@@ -44,6 +51,15 @@ fn inspect_object(bytes: &[u8]) -> Result<usize, String> {
         let size = usize::try_from(u32_at(bytes, header + 20)?).map_err(|_| "size overflow")?;
         if kind != 8 && kind != 0 && offset.checked_add(size).is_none_or(|end| end > bytes.len()) {
             return Err("section outside object".into());
+        }
+        if kind == 4 || kind == 9 {
+            let entry_size = if kind == 4 { 12 } else { 8 };
+            if u32_at(bytes, header + 36)? as usize != entry_size || size % entry_size != 0 {
+                return Err("unsupported relocation table envelope".into());
+            }
+            relocations = relocations
+                .checked_add(size / entry_size)
+                .ok_or("relocation count overflow")?;
         }
         if kind == 2 {
             symbol_tables += 1;
@@ -62,7 +78,10 @@ fn inspect_object(bytes: &[u8]) -> Result<usize, String> {
     if symbol_tables == 0 {
         return Err("compiler object lacks a symbol table".into());
     }
-    Ok(count)
+    Ok(ObjectSummary {
+        sections: count,
+        relocations,
+    })
 }
 
 fn run(program: &std::ffi::OsStr, args: &[&std::ffi::OsStr], root: &Path) -> Result<(), String> {
@@ -90,6 +109,11 @@ fn check() -> Result<(), String> {
     let cc = env::var_os("CC").unwrap_or_else(|| "cc".into());
     for (source, name) in [
         ("firmware/test_adapter.c", "adapter-native-tests"),
+        ("firmware/test_allocator_bridge.c", "bridge-native-tests"),
+        (
+            "firmware/test_allocator_bridge_adversarial.c",
+            "bridge-native-adversarial",
+        ),
         (
             "firmware/test_adapter_adversarial.c",
             "adapter-native-adversarial",
@@ -104,6 +128,7 @@ fn check() -> Result<(), String> {
             "-Werror",
             "-pedantic",
             "firmware/adapter.c",
+            "firmware/allocator_bridge.c",
             source,
             "-o",
         ];
@@ -119,29 +144,55 @@ fn check() -> Result<(), String> {
     }
     let bfin = env::var_os("BFIN_CC").unwrap_or_else(|| "bfin-elf-gcc".into());
     let object = output.join("adapter-bf524.o");
-    let flags = [
-        "-std=c11",
-        "-Os",
-        "-ffreestanding",
-        "-fno-builtin",
-        "-fno-common",
+    let core = output.join("adapter-core-bf524.o");
+    let bridge = output.join("allocator-bridge-bf524.o");
+    for (source, destination) in [
+        ("firmware/adapter.c", &core),
+        ("firmware/allocator_bridge.c", &bridge),
+    ] {
+        let flags = [
+            "-std=c11",
+            "-Os",
+            "-ffreestanding",
+            "-fno-builtin",
+            "-fno-common",
+            "-mcpu=bf524-any",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-c",
+            source,
+            "-o",
+        ];
+        let mut target_args: Vec<&std::ffi::OsStr> =
+            flags.iter().map(std::ffi::OsStr::new).collect();
+        target_args.push(destination.as_os_str());
+        run(&bfin, &target_args, root)?;
+    }
+    let link_flags = [
         "-mcpu=bf524-any",
-        "-Wall",
-        "-Wextra",
-        "-Werror",
-        "-c",
-        "firmware/adapter.c",
-        "-o",
+        "-nostdlib",
+        "-fno-use-linker-plugin",
+        "-r",
     ];
-    let mut target_args: Vec<&std::ffi::OsStr> = flags.iter().map(std::ffi::OsStr::new).collect();
-    target_args.push(object.as_os_str());
-    run(&bfin, &target_args, root)?;
+    let mut link_args: Vec<&std::ffi::OsStr> =
+        link_flags.iter().map(std::ffi::OsStr::new).collect();
+    link_args.extend([
+        core.as_os_str(),
+        bridge.as_os_str(),
+        std::ffi::OsStr::new("-o"),
+        object.as_os_str(),
+    ]);
+    run(&bfin, &link_args, root)?;
     let bytes = fs::read(&object).map_err(|e| e.to_string())?;
-    let sections = inspect_object(&bytes)?;
+    let summary = inspect_object(&bytes)?;
     println!(
-        "BF524-any compile passed: {} bytes, {sections} sections, no named undefined symbols.",
-        bytes.len()
+        "BF524-any compile passed: {} bytes, {} sections, {} relocation entries, no named undefined symbols.",
+        bytes.len(), summary.sections, summary.relocations
     );
+    if summary.relocations != 0 {
+        println!("Relocations retained: raw text is not a loadable firmware payload.");
+    }
     println!("Relocatable object only; no target execution, placement, ABI integration or hardware validation.");
     Ok(())
 }
@@ -178,7 +229,13 @@ mod tests {
 
     #[test]
     fn accepts_minimal_rel_envelope() {
-        assert_eq!(inspect_object(&fixture()), Ok(2));
+        assert_eq!(
+            inspect_object(&fixture()),
+            Ok(ObjectSummary {
+                sections: 2,
+                relocations: 0
+            })
+        );
     }
 
     #[test]
@@ -201,6 +258,24 @@ mod tests {
         assert!(inspect_object(&b).is_err());
         let mut b = fixture();
         b[128] = 8;
+        assert!(inspect_object(&b).is_err());
+    }
+    #[test]
+    fn counts_relocations_without_applying_them() {
+        let mut b = fixture();
+        b.resize(200, 0);
+        b[48..50].copy_from_slice(&3u16.to_le_bytes());
+        for (at, value) in [(108, 172u32), (136, 4), (148, 188), (152, 12), (168, 12)] {
+            b[at..at + 4].copy_from_slice(&value.to_le_bytes());
+        }
+        assert_eq!(
+            inspect_object(&b),
+            Ok(ObjectSummary {
+                sections: 3,
+                relocations: 1
+            })
+        );
+        b[168] = 8;
         assert!(inspect_object(&b).is_err());
     }
 }

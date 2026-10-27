@@ -104,3 +104,7 @@ no device memory reads or hardware synchronization.
 A freestanding C scaffold now exercises allocator/lease bookkeeping and compiles
 as a BF524 relocatable object. It has no capture-enable, pixel-copy or USB path,
 no stock bindings and no fixed placement. See [scope and offline Rust build checks](docs/DISABLED-ADAPTER.md).
+
+The [typed allocator bridge](docs/ALLOCATOR-BRIDGE.md) adapts single-argument
+allocator signatures without raw firmware addresses or incompatible pointer
+casts. The combined object retains relocations and is not a loadable image.
