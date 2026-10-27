@@ -1,0 +1,31 @@
+# Artificial addresses and placeholder digests. NOT a device placement proposal.
+version=1
+canonical_sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+module_sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+linked_sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+heap.start=0x1000
+heap.bytes=0x10000
+heap.alignment=8
+usable_start=0x1040
+cut=0x10000
+retained_stock_budget=0x1000
+code.start=0x10010
+code.bytes=0x400
+code.alignment=4
+guard_before.start=0x10000
+guard_before.bytes=16
+guard_before.alignment=4
+guard_after.start=0x10410
+guard_after.bytes=16
+guard_after.alignment=4
+final_image_bytes=0x400
+entry=0x10010
+state_bytes=92
+bridge_bytes=8
+staging_bytes=4096
+runtime_alignment=4
+allocation_overhead_budget=128
+reservation_stage=before_first_heap_registration
+image_inventory=final_module_hooks_trampolines_init
+runtime_contract=zeroed_state_immutable_bridge_lifetime_disjoint_serialized_fail_closed
+# All six evidence references deliberately absent: example must not be accepted.

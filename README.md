@@ -108,3 +108,12 @@ no stock bindings and no fixed placement. See [scope and offline Rust build chec
 The [typed allocator bridge](docs/ALLOCATOR-BRIDGE.md) adapts single-argument
 allocator signatures without raw firmware addresses or incompatible pointer
 casts. The combined object retains relocations and is not a loadable image.
+
+
+## Offline placement lint
+
+The address-neutral [placement validator](docs/PLACEMENT-VALIDATOR.md) checks
+explicit cold-reservation geometry, runtime budgets, input hashes and a narrow
+linked-ELF envelope. It rejects incomplete plans and never enables capture or
+selects a device address. Structural success is not physical ownership, semantic
+relocation proof, or device readiness. The supplied manifest is synthetic only.
