@@ -122,3 +122,8 @@ The [bounded relocation-result checker](docs/RELOCATION-CHECKS.md) reconstructs
 the current five Blackfin relocation results from the supplied REL object and
 checks every linked text byte. Synthetic links and corruption tests remain
 offline; input authentication and physical placement are separate gates.
+
+The [physical-reservation audit](docs/RESERVATION-EVIDENCE.md) narrows startup,
+arena, mapping and capacity questions. Intended executable mapping is conditional;
+owner lifetimes, code visibility and peak stock capacity remain unproved. No real
+placement or device-ready image is selected.
